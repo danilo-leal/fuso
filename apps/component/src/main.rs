@@ -1,6 +1,6 @@
 use gpui::{
     Application, Bounds, Context, Entity, IntoElement, Render, Subscription, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    WindowOptions, div, linear_color_stop, linear_gradient, prelude::*, px, rgb, size,
 };
 use gpui_component::{
     Root, Sizable as _,
@@ -8,7 +8,10 @@ use gpui_component::{
     input::{Input, InputEvent, InputState},
     slider::{Slider, SliderEvent, SliderState},
 };
-use time_core::{City, Timeline, chrono_tz, default_cities, search_available_cities};
+use time_core::{
+    City, Timeline, chrono_tz, day_night_icon, day_night_label, default_cities, is_daytime,
+    search_available_cities,
+};
 
 struct Converter {
     timeline: Timeline,
@@ -108,6 +111,74 @@ impl Converter {
     }
 }
 
+fn day_night_track() -> impl IntoElement {
+    div()
+        .flex()
+        .size_full()
+        .rounded_full()
+        .overflow_hidden()
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0x0f172a), 0.0), // Deep Night (00:00)
+            linear_color_stop(rgb(0xf59e0b), 1.0), // Sunrise (06:00)
+        )))
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0xf59e0b), 0.0), // Sunrise (06:00)
+            linear_color_stop(rgb(0x38bdf8), 1.0), // Midday (12:00)
+        )))
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0x38bdf8), 0.0), // Midday (12:00)
+            linear_color_stop(rgb(0xf43f5e), 1.0), // Sunset (18:00)
+        )))
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0xf43f5e), 0.0), // Sunset (18:00)
+            linear_color_stop(rgb(0x0f172a), 1.0), // Deep Night (24:00)
+        )))
+}
+
+fn slider_time_ticks() -> impl IntoElement {
+    div()
+        .flex()
+        .justify_between()
+        .items_center()
+        .px_1()
+        .text_xs()
+        .text_color(rgb(0x64748b))
+        .child(div().child("🌙 00:00"))
+        .child(div().child("🌅 06:00"))
+        .child(div().child("☀️ 12:00"))
+        .child(div().child("🌇 18:00"))
+        .child(div().child("🌙 24:00"))
+}
+
+fn day_night_badge(minute: u32) -> impl IntoElement {
+    let icon = day_night_icon(minute);
+    let label = day_night_label(minute);
+    let (bg_color, text_color, border_color) = if is_daytime(minute) {
+        (rgb(0x0c4a6e), rgb(0x38bdf8), rgb(0x0284c7))
+    } else {
+        (rgb(0x1e1b4b), rgb(0xa5b4fc), rgb(0x4338ca))
+    };
+
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .px_2()
+        .py_0p5()
+        .rounded_full()
+        .bg(bg_color)
+        .border_1()
+        .border_color(border_color)
+        .text_xs()
+        .text_color(text_color)
+        .child(icon)
+        .child(label)
+}
+
 impl Render for Converter {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         for (index, city) in self.cities.iter().enumerate() {
@@ -144,6 +215,7 @@ impl Render for Converter {
         let mut rows = div().flex().flex_col().gap_3();
         for (index, city) in self.cities.iter().enumerate() {
             let delta = self.timeline.day_difference(city.zone);
+            let minute_u32 = self.timeline.minute_of_day(city.zone);
             let mut row_header = div()
                 .flex()
                 .justify_between()
@@ -154,7 +226,15 @@ impl Render for Converter {
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .child(city.name.clone()),
                 )
-                .child(div().flex_1().child(self.timeline.display(city.zone)))
+                .child(
+                    div()
+                        .flex_1()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(self.timeline.display(city.zone))
+                        .child(day_night_badge(minute_u32)),
+                )
                 .child(div().w(px(90.0)).text_sm().child(match delta {
                     0 => "same day".into(),
                     _ => format!("{delta:+} day"),
@@ -185,6 +265,7 @@ impl Render for Converter {
                     .child(
                         div()
                             .w_full()
+                            .relative()
                             .debug_selector(move || {
                                 if index == 0 {
                                     "time-slider".into()
@@ -192,8 +273,23 @@ impl Render for Converter {
                                     format!("time-slider-{index}")
                                 }
                             })
-                            .child(Slider::new(&self.sliders[index]).horizontal().w_full()),
-                    ),
+                            .child(
+                                div()
+                                    .absolute()
+                                    .top(px(8.0))
+                                    .left_0()
+                                    .right_0()
+                                    .h(px(8.0))
+                                    .child(day_night_track()),
+                            )
+                            .child(
+                                Slider::new(&self.sliders[index])
+                                    .horizontal()
+                                    .w_full()
+                                    .bg(gpui::rgba(0x00000000)),
+                            ),
+                    )
+                    .child(slider_time_ticks()),
             );
         }
 
@@ -351,7 +447,7 @@ mod tests {
                 WindowOptions {
                     window_bounds: Some(WindowBounds::Windowed(Bounds::new(
                         point(px(0.0), px(0.0)),
-                        size(px(820.0), px(860.0)),
+                        size(px(820.0), px(1000.0)),
                     ))),
                     ..Default::default()
                 },

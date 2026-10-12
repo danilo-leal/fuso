@@ -1,13 +1,16 @@
 use base_gpui::{
     button::ButtonRoot,
     input::Input,
-    slider::{SliderControl, SliderIndicator, SliderRoot, SliderThumb, SliderTrack, SliderValues},
+    slider::{SliderControl, SliderRoot, SliderThumb, SliderTrack, SliderValues},
 };
 use gpui::{
     Bounds, Context, ElementId, IntoElement, Render, SharedString, Window, WindowBounds,
-    WindowOptions, div, prelude::*, px, rgb, size,
+    WindowOptions, div, linear_color_stop, linear_gradient, prelude::*, px, rgb, size,
 };
-use time_core::{City, Timeline, chrono_tz, default_cities, search_available_cities};
+use time_core::{
+    City, Timeline, chrono_tz, day_night_icon, day_night_label, default_cities, is_daytime,
+    search_available_cities,
+};
 
 struct Converter {
     timeline: Timeline,
@@ -97,6 +100,74 @@ fn city_pick_button(id: impl Into<ElementId>, label: impl Into<SharedString>) ->
         .child(label)
 }
 
+fn day_night_track() -> impl IntoElement {
+    div()
+        .flex()
+        .size_full()
+        .rounded_full()
+        .overflow_hidden()
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0x0f172a), 0.0), // Deep Night (00:00)
+            linear_color_stop(rgb(0xf59e0b), 1.0), // Sunrise (06:00)
+        )))
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0xf59e0b), 0.0), // Sunrise (06:00)
+            linear_color_stop(rgb(0x38bdf8), 1.0), // Midday (12:00)
+        )))
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0x38bdf8), 0.0), // Midday (12:00)
+            linear_color_stop(rgb(0xf43f5e), 1.0), // Sunset (18:00)
+        )))
+        .child(div().flex_1().h_full().bg(linear_gradient(
+            90.0,
+            linear_color_stop(rgb(0xf43f5e), 0.0), // Sunset (18:00)
+            linear_color_stop(rgb(0x0f172a), 1.0), // Deep Night (24:00)
+        )))
+}
+
+fn slider_time_ticks() -> impl IntoElement {
+    div()
+        .flex()
+        .justify_between()
+        .items_center()
+        .px_1()
+        .text_xs()
+        .text_color(rgb(0x64748b))
+        .child(div().child("🌙 00:00"))
+        .child(div().child("🌅 06:00"))
+        .child(div().child("☀️ 12:00"))
+        .child(div().child("🌇 18:00"))
+        .child(div().child("🌙 24:00"))
+}
+
+fn day_night_badge(minute: u32) -> impl IntoElement {
+    let icon = day_night_icon(minute);
+    let label = day_night_label(minute);
+    let (bg_color, text_color, border_color) = if is_daytime(minute) {
+        (rgb(0x0c4a6e), rgb(0x38bdf8), rgb(0x0284c7))
+    } else {
+        (rgb(0x1e1b4b), rgb(0xa5b4fc), rgb(0x4338ca))
+    };
+
+    div()
+        .flex()
+        .items_center()
+        .gap_1()
+        .px_2()
+        .py_0p5()
+        .rounded_full()
+        .bg(bg_color)
+        .border_1()
+        .border_color(border_color)
+        .text_xs()
+        .text_color(text_color)
+        .child(icon)
+        .child(label)
+}
+
 impl Render for Converter {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let mut references = div().flex().flex_wrap().gap_2();
@@ -162,15 +233,10 @@ impl Render for Converter {
                         .child(
                             SliderTrack::new()
                                 .w_full()
-                                .h(px(6.0))
+                                .h(px(8.0))
                                 .rounded_full()
-                                .bg(rgb(0x475569))
-                                .child(
-                                    SliderIndicator::new()
-                                        .h_full()
-                                        .rounded_full()
-                                        .bg(rgb(0x38bdf8)),
-                                ),
+                                .overflow_hidden()
+                                .child_any(day_night_track()),
                         )
                         .child(
                             SliderThumb::new()
@@ -178,19 +244,33 @@ impl Render for Converter {
                                 .w(px(18.0))
                                 .h(px(18.0))
                                 .rounded_full()
-                                .bg(rgb(0xe2e8f0))
+                                .bg(rgb(0xffffff))
                                 .border_2()
                                 .border_color(rgb(0x38bdf8)),
                         ),
                 );
 
+            let minute_u32 = city_minute.round() as u32;
             let mut row_header = div()
                 .flex()
                 .justify_between()
                 .items_center()
-                .child(div().w(px(140.0)).child(city.name.clone()))
-                .child(div().flex_1().child(self.timeline.display(city.zone)))
-                .child(div().w(px(100.0)).text_sm().child(match delta {
+                .child(
+                    div()
+                        .w(px(140.0))
+                        .font_weight(gpui::FontWeight::SEMIBOLD)
+                        .child(city.name.clone()),
+                )
+                .child(
+                    div()
+                        .flex_1()
+                        .flex()
+                        .items_center()
+                        .gap_2()
+                        .child(self.timeline.display(city.zone))
+                        .child(day_night_badge(minute_u32)),
+                )
+                .child(div().w(px(90.0)).text_sm().child(match delta {
                     0 => "same day".into(),
                     _ => format!("{delta:+} day"),
                 }));
@@ -216,7 +296,8 @@ impl Render for Converter {
                     .rounded_md()
                     .bg(rgb(0x1e293b))
                     .child(row_header)
-                    .child(slider),
+                    .child(slider)
+                    .child(slider_time_ticks()),
             );
         }
 
@@ -386,7 +467,7 @@ mod tests {
     #[gpui::test]
     fn slider_updates_the_shared_timeline(cx: &mut TestAppContext) {
         cx.update(base_gpui::init);
-        let window = cx.open_window(size(px(820.0), px(860.0)), |_, _| {
+        let window = cx.open_window(size(px(820.0), px(1000.0)), |_, _| {
             Converter::new(Timeline::at(
                 "2026-10-12T12:00:00Z".parse().unwrap(),
                 chrono_tz::America::Sao_Paulo,

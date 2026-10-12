@@ -117,6 +117,29 @@ pub fn search_available_cities(query: &str) -> Vec<City> {
     results
 }
 
+pub fn is_daytime(minute_of_day: u32) -> bool {
+    let m = minute_of_day % 1440;
+    (360..=1080).contains(&m)
+}
+
+pub fn day_night_icon(minute_of_day: u32) -> &'static str {
+    match minute_of_day % 1440 {
+        360..=480 => "🌅",
+        481..=1020 => "☀️",
+        1021..=1140 => "🌇",
+        _ => "🌙",
+    }
+}
+
+pub fn day_night_label(minute_of_day: u32) -> &'static str {
+    match minute_of_day % 1440 {
+        360..=480 => "Dawn",
+        481..=1020 => "Day",
+        1021..=1140 => "Dusk",
+        _ => "Night",
+    }
+}
+
 pub struct Timeline {
     anchor: DateTime<Utc>,
     offset_minutes: i32,
@@ -348,5 +371,29 @@ mod tests {
                 .iter()
                 .any(|c| c.zone == chrono_tz::America::Bogota)
         );
+    }
+
+    #[test]
+    fn day_night_helpers_classify_minutes() {
+        assert!(!is_daytime(0));
+        assert!(!is_daytime(180)); // 03:00
+        assert_eq!(day_night_icon(180), "🌙");
+        assert_eq!(day_night_label(180), "Night");
+
+        assert!(is_daytime(420)); // 07:00
+        assert_eq!(day_night_icon(420), "🌅");
+        assert_eq!(day_night_label(420), "Dawn");
+
+        assert!(is_daytime(720)); // 12:00
+        assert_eq!(day_night_icon(720), "☀️");
+        assert_eq!(day_night_label(720), "Day");
+
+        assert!(is_daytime(1050)); // 17:30
+        assert_eq!(day_night_icon(1050), "🌇");
+        assert_eq!(day_night_label(1050), "Dusk");
+
+        assert!(!is_daytime(1320)); // 22:00
+        assert_eq!(day_night_icon(1320), "🌙");
+        assert_eq!(day_night_label(1320), "Night");
     }
 }

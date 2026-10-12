@@ -47,6 +47,11 @@ at runtime. The initial dependency fetch/build does need internet access.
   Selecting a reference changes the presentation, not the shared instant.
 - Each city has its own 24-hour slider showing its local time. Dragging **any**
   slider adjusts all other city sliders in lockstep to reflect the shared instant.
+- **Day & Night Visual Gradient**:
+  - Each slider track displays a smooth 24-hour gradient indicating nighttime and daytime:
+    deep night (00:00) → sunrise dawn (06:00) → bright midday sun (12:00) → sunset dusk (18:00) → deep night (24:00).
+  - Time ticks (`🌙 00:00`, `🌅 06:00`, `☀️ 12:00`, `🌇 18:00`, `🌙 24:00`) mark key solar transition points.
+  - A real-time day/night badge (`☀️ Day`, `🌙 Night`, `🌅 Dawn`, `🌇 Dusk`) appears alongside each city's time.
 - **Add & Remove Cities**:
   - Remove any city with the **✕ Remove** button in its row (a minimum of 1 city is preserved).
   - Add cities via the **+ Add City** panel: search across 45+ popular world cities or all 600+ IANA time zones.
