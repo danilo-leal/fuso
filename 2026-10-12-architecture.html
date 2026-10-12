@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Time Zone Converter — Architecture explained</title>
+<style>
+:root{--bg:#f5f4ef;--paper:#fff;--ink:#172c36;--muted:#53656d;--line:#d5dfe0;--accent:#006f72;--wash:#eaf5f3;--code:#142b35;--gold:#805414}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}
+body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:1060px;margin:auto;padding:60px 28px 90px}
+h1,h2,h3{line-height:1.18;letter-spacing:-.035em}h1{font-size:clamp(2.5rem,6vw,4.5rem);max-width:800px;margin:14px 0 24px}
+h2{font-size:2.1rem;margin-top:0}h3{font-size:1.35rem;margin:30px 0 12px}p{max-width:80ch}a{color:var(--accent);text-underline-offset:3px}
+.eyebrow{font-size:.8rem;text-transform:uppercase;letter-spacing:.16em;font-weight:750;color:var(--accent)}
+.lede{font-size:1.25rem;max-width:66ch;color:var(--muted)}.meta,.small{font-size:.88rem;color:var(--muted)}
+nav{margin:34px 0 55px;border-block:1px solid var(--line);padding:18px 0;display:flex;gap:22px;flex-wrap:wrap}nav a{font-weight:650}
+section{padding:36px 0;border-top:1px solid var(--line)}section:first-of-type{border-top:0}
+.number{color:var(--accent);font:600 .85rem ui-monospace,monospace;display:block;margin-bottom:12px}
+.callout{background:var(--wash);border-left:4px solid var(--accent);padding:18px 22px;margin:26px 0;border-radius:0 10px 10px 0}.callout p{margin:4px 0}
+.edge{border-color:var(--gold)}details{border:1px solid var(--line);background:var(--paper);border-radius:12px;padding:20px 24px;margin:24px 0}
+summary{cursor:pointer;font-weight:700}details[open] summary{margin-bottom:16px}
+figure{margin:28px 0}figcaption{font-size:.85rem;color:var(--muted);margin-top:12px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.card,.node{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:22px;min-width:0}
+.card h3,.node h3{margin:0 0 10px}.node code{display:block;font-size:.85rem;overflow-wrap:anywhere}
+.flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:12px}.arrow{font-size:1.5rem;color:var(--accent);text-align:center}.node.highlight{background:var(--wash);border-color:var(--accent)}
+.converge{display:grid;grid-template-columns:1fr 1fr;gap:16px}.shared{grid-column:1/-1;max-width:620px;justify-self:center;text-align:center;width:100%}
+code{font: .88em ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--code);color:#e4f5ef;padding:22px;border-radius:12px;line-height:1.6;font-size:.88rem;overflow-x:auto}pre code{font-size:inherit}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;margin:20px 0;font-size:.94rem}th,td{text-align:left;vertical-align:top;padding:14px 12px;border-bottom:1px solid var(--line)}th{font-size:.85rem;color:var(--muted)}
+.lab{background:var(--code);color:#e4f5ef;border-radius:16px;padding:26px}.lab h3{margin-top:0}.lab .small{color:#b4ccce}.controls{display:flex;gap:18px;flex-wrap:wrap;margin:18px 0}
+label{display:block;font-weight:650;font-size:.9rem}select,button{font:inherit;border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--paper);color:var(--ink)}
+select{max-width:100%;margin-top:7px}button{cursor:pointer}button:hover{border-color:var(--accent)}button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #31b5ad;outline-offset:3px}
+.slider{width:100%;accent-color:#56d0c3;margin:14px 0}.ticks{display:flex;justify-content:space-between;font-size:.85rem;color:#b4ccce}
+.readout{background:#203b45;border-radius:10px;padding:14px 18px;margin:18px 0;font: .95rem/1.7 ui-monospace,monospace;overflow-wrap:anywhere}
+.city-row{display:grid;grid-template-columns:120px 1fr 82px;gap:12px;align-items:center;border-top:1px solid #3d555e;padding:12px 0}.city-row time{font-variant-numeric:tabular-nums}.badge{font-size:.8rem;color:#a3e8de;text-align:right}
+.step-list{padding-left:24px}.step-list li{padding:8px 0}.step-list li strong{display:block}
+.quiz-card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:24px;margin:18px 0}.quiz-card h3{margin:0 0 18px}
+.answers{display:grid;gap:9px}.answers button{text-align:left;width:100%;line-height:1.5}.answers button[aria-pressed="true"]{border:2px solid var(--accent);background:var(--wash)}.feedback{min-height:1.7em;margin:14px 0 0;font-size:.95rem}.feedback.wrong{color:var(--gold)}.feedback.correct{color:var(--accent)}
+footer{margin-top:36px;padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:.9rem}
+@media(max-width:700px){main{padding:32px 18px 55px}.cards,.converge,.flow{grid-template-columns:1fr}.shared{grid-column:auto}.arrow{transform:rotate(90deg)}.city-row{grid-template-columns:1fr auto}.city-row time{grid-column:1/-1;grid-row:2;font-size:.9rem}.badge{grid-column:2;grid-row:1}.lab{padding:18px}h2{font-size:1.8rem}th,td{padding:10px 8px}}
+@media(prefers-color-scheme:dark){:root{--bg:#101f27;--paper:#172b34;--ink:#e0eeef;--muted:#a9bdc2;--line:#35505a;--accent:#75d9c9;--wash:#203d43;--gold:#efc483}pre,.lab{background:#091b24}.feedback.wrong{color:var(--gold)}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{body{background:white;color:black}main{padding:0}nav,.controls,.slider,.ticks,.answers button,#quiz-reset{display:none}.card,.node,.lab,pre{break-inside:avoid}.lab,pre{background:#eee;color:black}.small,.badge{color:#444!important}details{display:block}section{break-before:auto}}
+</style>
+</head>
+<body>
+<main>
+<header>
+<div class="eyebrow">Architecture field guide · 12 October 2026</div>
+<h1>One instant.<br>Two ways to build a UI.</h1>
+<p class="lede">Time Zone Converter separates the question “What time is it there?” from the question “How should the controls work?” That boundary lets you explore two GPUI libraries without writing the conversion logic twice.</p>
+<p class="meta">A guide to the current starter, not a pull request diff. No server. No shared process. Two native apps, one reusable Rust core.</p>
+</header>
+<nav aria-label="Table of contents">
+<a href="#background">01 Background</a><a href="#intuition">02 Intuition</a><a href="#code">03 Code walkthrough</a><a href="#quiz">04 Quiz</a>
+</nav>
+<noscript><p class="callout">JavaScript is disabled. The written guide still works; enable JavaScript for the timeline demonstration and quiz.</p></noscript>
+
+<section id="background">
+<span class="number">01 / BACKGROUND</span>
+<h2>Start with the boundaries</h2>
+<p>The project started as an empty folder. The useful “existing system” is now a small Rust core and two native desktop frontends. There is no database, web backend, or global state service behind the window. The frontend owns a <code>Timeline</code> value and uses it to render every city.</p>
+<details>
+<summary>New to Rust or GPUI? Read the foundations; otherwise skip ahead.</summary>
+<h3>A crate is a unit of Rust code</h3>
+<p>A <code>Cargo.toml</code> manifest defines a package and its dependencies. Here, <code>time-core</code> provides a library; <code>timezone-component</code> and <code>timezone-base</code> provide executable programs. A Cargo workspace groups packages so commands can build or test them together. It does not mean those packages run in the same process.</p>
+<h3>GPUI builds native windows, not web pages</h3>
+<p>Both frontends implement the <code>Render</code> trait. Their <code>render</code> method describes a tree of elements using builders such as <code>div().flex().child(...)</code>. The syntax resembles web layout, but GPUI performs native layout, input handling, and GPU rendering. There is no browser DOM in either Rust app. This HTML guide is a separate document.</p>
+<h3>An entity gives mutable UI state an identity</h3>
+<p>GPUI manages views and state through entities. An <code>Entity&lt;SliderState&gt;</code> is a handle, not a copied slider. A <code>Context&lt;Converter&gt;</code> lets a handler update the converter and call <code>cx.notify()</code>. Notification tells GPUI that the view has changed and should render again; changing a field alone is not that signal.</p>
+<h3>A time zone is a rule set, not a number</h3>
+<p><code>America/New_York</code> describes historical and seasonal rules. <code>-05:00</code> is only an offset at a particular instant. An IANA zone allows the library to determine when that offset becomes <code>-04:00</code>. <code>chrono</code> provides date/time values and arithmetic; <code>chrono-tz</code> supplies bundled IANA rules; <code>iana-time-zone</code> detects the Mac's zone name.</p>
+</details>
+<h3>The application has three layers</h3>
+<figure>
+<div class="converge">
+<div class="node"><span class="eyebrow">Executable A</span><h3>GPUI Component</h3><p>Styled <code>Button</code> and <code>Slider</code>, a slider entity, and a required <code>Root</code> wrapper.</p><code>apps/component/src/main.rs</code></div>
+<div class="node"><span class="eyebrow">Executable B</span><h3>Base GPUI</h3><p>Headless button and slider parts, assembled and styled in this project.</p><code>apps/base/src/main.rs</code></div>
+<div class="node highlight shared"><span class="eyebrow">Both depend on this code</span><h3>time-core</h3><p><code>Timeline</code>, city definitions, zone detection, UTC arithmetic, local formatting, and date differences.</p><code>crates/time-core/src/lib.rs</code></div>
+</div>
+<figcaption>Each executable constructs its own Timeline. Sharing library code does not synchronize the two running windows.</figcaption>
+</figure>
+<div class="callout"><strong>Base GPUI is not “bare GPUI.”</strong><p>GPUI is the underlying framework in both apps. Base GPUI is a headless component library built on top of it. You already use bare GPUI layout, entities, and render callbacks in each frontend.</p></div>
+<h3>Why not put both libraries in one window?</h3>
+<p>The pinned versions use different GPUI dependency sources. The Component app uses the published <code>gpui 0.2.2</code>; Base uses a specific Git revision of Zed's GPUI and its platform crate. A matching version label is not proof of matching APIs or interchangeable types. A window or entity from one dependency is not automatically valid for the other.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Dependency boundary</th><th>Verified pair</th><th>Resolution</th></tr></thead>
+<tbody>
+<tr><td>Component frontend</td><td><code>gpui-component = 0.5.1</code><br><code>gpui = 0.2.2</code> from crates.io</td><td>Root workspace and root <code>Cargo.lock</code></td></tr>
+<tr><td>Base frontend</td><td>Base commit <code>a603edd0…</code><br>GPUI / platform commit <code>1d029c5f…</code></td><td>Independent workspace and <code>apps/base/Cargo.lock</code></td></tr>
+</tbody></table></div>
+<p>The root workspace explicitly excludes <code>apps/base</code>; the Base manifest declares its own workspace. Both depend on the core by relative path. The core imports no GPUI types, so that boundary remains safe.</p>
+</section>
+
+<section id="intuition">
+<span class="number">02 / INTUITION</span>
+<h2>Move the instant, not six clocks</h2>
+<p>Imagine a meeting scheduled for <strong>2026-10-12 at 23:30 UTC</strong>. In Sao Paulo it is 20:30 on Monday; in Tokyo it is 08:30 on Tuesday. Those are not two events. They are two local descriptions of the same event.</p>
+<figure>
+<div class="flow">
+<div class="node"><h3>Anchor + offset</h3><code>23:30Z + 60 minutes</code><p>The slider supplies elapsed minutes.</p></div>
+<div class="arrow" aria-hidden="true">→</div>
+<div class="node highlight"><h3>One UTC instant</h3><code>2026-10-13 00:30Z</code><p>This is the invariant every row shares.</p></div>
+<div class="arrow" aria-hidden="true">→</div>
+<div class="node"><h3>Local projections</h3><code>Sao Paulo: Oct 12, 21:30</code><code>Tokyo: Oct 13, 09:30</code></div>
+</div>
+<figcaption>The slider does not edit a local hour and convert it back to UTC. It advances the existing UTC timeline.</figcaption>
+</figure>
+<p>The reference zone is another projection. Changing it does not move the meeting. It changes the prominent reference display and the meaning of the row labels “same day,” “+1 day,” and “-1 day.” Those labels compare <em>calendar dates</em>, not elapsed 24-hour periods.</p>
+<h3>Try the model</h3>
+<p>This miniature browser demonstration uses a fixed anchor so the examples are repeatable. Choose a reference, then move the slider. Notice that the UTC value stays unchanged when only the reference changes.</p>
+<figure class="lab">
+<h3>A planning timeline</h3>
+<div class="controls">
+<label for="scenario">Example anchor
+<select id="scenario">
+<option value="2026-10-12T23:30:00Z">A meeting across midnight</option>
+<option value="2026-03-08T06:30:00Z">New York: spring DST transition</option>
+<option value="2026-11-01T05:30:00Z">New York: repeated autumn hour</option>
+</select></label>
+<label for="reference">Reference zone
+<select id="reference">
+<option value="America/Sao_Paulo">Sao Paulo</option>
+<option value="America/New_York">New York</option>
+<option value="Europe/London">London</option>
+<option value="Asia/Tokyo">Tokyo</option>
+<option value="Australia/Sydney">Sydney</option>
+<option value="UTC">UTC</option>
+</select></label>
+</div>
+<label for="minutes">Offset from anchor: <output id="offset" for="minutes">+0 minutes</output></label>
+<input class="slider" id="minutes" type="range" min="-1440" max="1440" value="0" step="1">
+<div class="ticks"><span>-24 hours</span><span>Anchor</span><span>+24 hours</span></div>
+<div class="controls"><button id="add-hour" type="button">Move +60 minutes</button><button id="reset-anchor" type="button">Return to anchor</button></div>
+<div class="readout"><div id="utc-readout"></div><div id="reference-readout"></div></div>
+<div id="city-rows" aria-label="Local city times"></div>
+<p class="small">An illustration, not the Rust app: this uses your browser's Intl time-zone rules. The native app uses the rules bundled with chrono-tz. “Return to anchor” here is deliberately different from the native Now button, which captures the current time.</p>
+<figcaption class="small">For either DST example, press “Move +60 minutes” once and inspect New York's wall time and UTC offset.</figcaption>
+</figure>
+<div class="callout edge"><strong>The spring gap and the autumn overlap</strong><p>On 8 March 2026, New York goes from 01:30 EST at 06:30Z to 03:30 EDT at 07:30Z. An elapsed hour skips 02:30. On 1 November, 05:30Z and 06:30Z both display 01:30, but one is EDT (-04:00) and the other EST (-05:00). UTC keeps them distinct.</p></div>
+<p>This model avoids having to decide what an ambiguous local time means. That decision will become necessary if the app later accepts typed local dates and times. It is not a problem the starter silently solves today.</p>
+</section>
+
+<section id="code">
+<span class="number">03 / CODE</span>
+<h2>Follow one gesture through the code</h2>
+<p>The fastest way to understand the implementation is to follow a slider gesture: the widget proposes a minute offset, the frontend updates the core, GPUI gets notified, and the view formats every city from the new instant.</p>
+<h3>1. The core stores only the facts it needs</h3>
+<pre><code>// crates/time-core/src/lib.rs
+pub struct Timeline {
+    anchor: DateTime&lt;Utc&gt;,
+    offset_minutes: i32,
+    pub reference: Tz,
+    pub zone_detection: String,
+}
+
+pub fn instant(&amp;self) -&gt; DateTime&lt;Utc&gt; {
+    self.anchor + Duration::minutes(i64::from(self.offset_minutes))
+}
+
+pub fn set_offset(&amp;mut self, minutes: i32) {
+    self.offset_minutes = minutes.clamp(MIN_OFFSET, MAX_OFFSET);
+}</code></pre>
+<p><code>anchor</code> is rounded down to the minute. The offset is bounded to -1440 through +1440 minutes. Local times are derived when needed; they are not separately stored and kept in sync. The six entries in <code>CITIES</code> pair labels with typed <code>chrono_tz::Tz</code> values.</p>
+<p><code>Timeline::now()</code> detects the OS zone, parses it, and records a human-readable detection message. Failure is explicit: the message reports UTC fallback, and the error is printed. <code>reset_now()</code> replaces the anchor and zeroes the offset while preserving the chosen reference.</p>
+<h3>2. The styled frontend listens to a slider entity</h3>
+<pre><code>// apps/component/src/main.rs: Converter::new
+let subscription = cx.subscribe(&amp;slider, |this, _, event, cx| {
+    let SliderEvent::Change(value) = event;
+    this.timeline.set_offset(value.start().round() as i32);
+    cx.notify();
+});</code></pre>
+<p>The Component <code>Converter</code> owns three things: its timeline, a handle to <code>SliderState</code>, and the subscription. The slider library manages its own value; the subscription mirrors that value into the timeline. Keeping the <code>Subscription</code> in <code>_subscription</code> keeps the listener alive. The underscore does not make the field disposable.</p>
+<div class="callout"><strong>Now must update both state holders.</strong><p>The Component handler calls <code>timeline.reset_now()</code> and <code>slider.set_value(0.0, ...)</code>. Updating only the timeline would leave the thumb showing an old value even though the city rows had reset.</p></div>
+<h3>3. The headless frontend passes a controlled value</h3>
+<pre><code>// apps/base/src/main.rs: Render for Converter
+SliderRoot::new()
+    .value(SliderValues::Single(f64::from(
+        self.timeline.offset_minutes(),
+    )))
+    .on_value_change(move |values, _, _, cx| {
+        let SliderValues::Single(value) = values else {
+            panic!("Single-thumb time slider emitted a range");
+        };
+        entity.update(cx, |this, cx| {
+            this.timeline.set_offset(value.round() as i32);
+            cx.notify();
+        });
+    })</code></pre>
+<p>In the Base frontend, the application does not store a separate <code>Entity&lt;SliderState&gt;</code>. It passes the timeline's value to <code>SliderRoot</code> each render. The callback writes proposed changes back to that same timeline. The library still manages interaction details internally; “controlled” means the application supplies the authoritative value.</p>
+<figure>
+<div class="cards">
+<div class="node"><h3>Component: subscribe</h3><p>Widget entity stores value → emits change → Timeline updates → view renders.</p><p>Now explicitly resets both the timeline and widget state.</p></div>
+<div class="node highlight"><h3>Base: control</h3><p>Timeline supplies value → widget proposes change → Timeline updates → value is supplied again.</p><p>Now resets the timeline; rendering recenters the controlled widget.</p></div>
+</div>
+<figcaption>Both routes reach the same core. Their different state ownership is the most useful contrast to study.</figcaption>
+</figure>
+<p>The Base slider is composed from <code>SliderControl</code>, <code>SliderTrack</code>, <code>SliderIndicator</code>, and <code>SliderThumb</code>. Their dimensions and colors are declared locally. <code>ButtonRoot::style_with_state</code> similarly lets the app style a focused button. In the Component version, ready-made <code>Button</code> and <code>Slider</code> widgets provide those details.</p>
+<h3>4. Notification connects state to presentation</h3>
+<ol class="step-list">
+<li><strong>Input reaches a library widget.</strong>A drag or track click yields a proposed numeric minute offset.</li>
+<li><strong>The handler changes the Timeline.</strong>Values are rounded to integer minutes and clamped by the core.</li>
+<li><strong>The handler calls cx.notify().</strong>GPUI knows the owning view needs to render again.</li>
+<li><strong>Render derives all six rows.</strong><code>display(zone)</code> formats the shared instant; <code>day_difference(zone)</code> compares that city's date to the reference date.</li>
+</ol>
+<p>The rendering path does no disk or network I/O. It formats a fixed six-city collection. There is no timer or background queue advancing the timeline. This is a bounded planning tool, not a live clock.</p>
+<h3>5. Startup differs; the domain logic does not</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Concern</th><th>Component frontend</th><th>Base frontend</th></tr></thead>
+<tbody>
+<tr><td>Application entry</td><td><code>Application::new().run(...)</code></td><td><code>gpui_platform::application().run(...)</code></td></tr>
+<tr><td>Widget initialization</td><td><code>gpui_component::init(cx)</code></td><td><code>base_gpui::init(cx)</code></td></tr>
+<tr><td>Window root</td><td><code>Root::new(view, window, cx)</code></td><td>The <code>Converter</code> entity directly</td></tr>
+<tr><td>App-owned state</td><td>Timeline, slider entity, subscription</td><td>Timeline</td></tr>
+<tr><td>Slider input</td><td>Pointer interaction in this pinned version</td><td>Pointer plus focus/arrow-key interaction</td></tr>
+<tr><td>Closing the last window</td><td colspan="2">A retained window-closed callback calls <code>cx.quit()</code>.</td></tr>
+</tbody></table></div>
+<h3>6. Where to make your next change</h3>
+<div class="table-wrap"><table>
+<thead><tr><th>Goal</th><th>Start here</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Add a curated city</td><td><a href="crates/time-core/src/lib.rs"><code>time-core/src/lib.rs</code></a>: <code>CITIES</code></td><td>Both frontends iterate the same city definitions.</td></tr>
+<tr><td>Experiment with styled widgets</td><td><a href="apps/component/src/main.rs"><code>apps/component/src/main.rs</code></a></td><td>Button and Slider usage stays in one file.</td></tr>
+<tr><td>Experiment with headless parts</td><td><a href="apps/base/src/main.rs"><code>apps/base/src/main.rs</code></a></td><td>Composition, styling, and the controlled callback are visible together.</td></tr>
+<tr><td>Change offset limits or date labels</td><td><code>Timeline</code> and core constants</td><td>Conversion policy belongs in the shared core.</td></tr>
+<tr><td>Upgrade a UI library</td><td>Its manifest and lockfile</td><td>Keep Base's GPUI/platform revisions aligned with Base's dependency, not with the other frontend.</td></tr>
+</tbody></table></div>
+<p>The UI layout is intentionally duplicated. A common GPUI view abstraction would cross incompatible types and hide the very differences this starter is meant to teach. Shared domain logic is valuable here; shared widget code is not yet a requirement.</p>
+<h3>Run and verify the two boundaries</h3>
+<pre><code>cd ~/Documents/GitHub/timezone-converter
+
+# The default workspace contains the core and Component app.
+cargo run --locked -p timezone-component
+cargo test --workspace --locked
+
+# Base has a separate dependency graph and test command.
+cargo run --locked --manifest-path apps/base/Cargo.toml
+cargo test --locked --manifest-path apps/base/Cargo.toml</code></pre>
+<p>The core has five tests for rollover, DST gaps, repeated hours, reference changes, and minute/range boundaries. Each frontend also has a GPUI interaction test that clicks at roughly three-quarter slider width, then drags toward one-quarter width and checks the timeline offset. That proves widget-to-model wiring, not just standalone date arithmetic. It does not exhaustively test every button, keyboard path, or visual style.</p>
+<div class="callout edge"><strong>What this architecture does not yet provide</strong><p>No city search, editable city list, arbitrary date entry, persisted preferences, packaged installer, or synchronization between the two apps. The Mac zone is detected at construction, not watched for subsequent OS changes. Adding many cities would also call for revisiting the fixed, directly rendered row list.</p></div>
+</section>
+
+<section id="quiz">
+<span class="number">04 / QUIZ</span>
+<h2>Can you predict the behavior?</h2>
+<p>Choose one answer for each question. You can revise an answer after reading the feedback; the score counts your current answers, not your first attempt.</p>
+<p id="quiz-score" role="status">0 of 5 answered.</p>
+<div id="quiz-questions"></div>
+<button type="button" id="quiz-reset">Reset quiz</button>
+</section>
+<footer>
+<p><strong>The central idea:</strong> own one UTC instant per app, derive every local display, and keep library-specific state at the frontend boundary.</p>
+<p>Self-contained architecture guide · source files are linked relative to this project document · <a href="README.md">Project README</a>. Interactive examples use browser time-zone data; the Rust source remains authoritative.</p>
+</footer>
+</main>
+<script>
+"use strict";
+const cities = [
+  ["Sao Paulo", "America/Sao_Paulo"], ["New York", "America/New_York"],
+  ["London", "Europe/London"], ["Tokyo", "Asia/Tokyo"],
+  ["Sydney", "Australia/Sydney"], ["UTC", "UTC"]
+];
+const scenario = document.getElementById("scenario");
+const reference = document.getElementById("reference");
+const minutes = document.getElementById("minutes");
+const formatters = new Map(cities.map(([, zone]) => [zone, new Intl.DateTimeFormat("en-GB", {
+  timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZoneName: "longOffset"
+})]));
+function localParts(instant, zone) {
+  return Object.fromEntries(formatters.get(zone).formatToParts(instant).map(part => [part.type, part.value]));
+}
+function localDateNumber(parts) {
+  return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86400000;
+}
+function localLabel(parts) {
+  return `${parts.year}-${parts.month}-${parts.day}  ${parts.hour}:${parts.minute}  ${parts.timeZoneName}`;
+}
+const rows = cities.map(([name, zone]) => {
+  const row = document.createElement("div");
+  row.className = "city-row";
+  const city = document.createElement("strong");
+  city.textContent = name;
+  const time = document.createElement("time");
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  row.append(city, time, badge);
+  document.getElementById("city-rows").append(row);
+  return {zone, time, badge};
+});
+function updateTimeline() {
+  const offset = Number(minutes.value);
+  const instant = new Date(Date.parse(scenario.value) + offset * 60000);
+  const ref = localParts(instant, reference.value);
+  document.getElementById("offset").textContent = `${offset >= 0 ? "+" : ""}${offset} minutes`;
+  document.getElementById("utc-readout").textContent = `Shared instant: ${instant.toISOString().replace(".000Z", "Z")}`;
+  document.getElementById("reference-readout").textContent = `Reference: ${localLabel(ref)}`;
+  for (const row of rows) {
+    const parts = localParts(instant, row.zone);
+    const delta = localDateNumber(parts) - localDateNumber(ref);
+    row.time.textContent = localLabel(parts);
+    row.time.dateTime = instant.toISOString();
+    row.badge.textContent = delta === 0 ? "same day" : `${delta > 0 ? "+" : ""}${delta} day`;
+  }
+}
+minutes.addEventListener("input", updateTimeline);
+reference.addEventListener("change", updateTimeline);
+scenario.addEventListener("change", () => { minutes.value = "0"; updateTimeline(); });
+document.getElementById("add-hour").addEventListener("click", () => {
+  minutes.value = String(Math.min(1440, Number(minutes.value) + 60));
+  updateTimeline();
+});
+document.getElementById("reset-anchor").addEventListener("click", () => { minutes.value = "0"; updateTimeline(); });
+updateTimeline();
+
+const questions = [
+  {
+    title: "1. At 23:30Z, you change the reference from Sao Paulo to Tokyo. What changes?",
+    choices: [
+      "The UTC instant advances to match Tokyo's local clock.",
+      "The UTC instant stays fixed; the reference display and relative day labels change.",
+      "Only the reference heading changes; day labels are always relative to UTC."
+    ], answer: 1,
+    feedback: "The reference is a projection, not the source of the instant. Tokyo is on October 13; Sao Paulo is on October 12, so Sao Paulo's label becomes -1 day relative to Tokyo."
+  },
+  {
+    title: "2. Why does the Component Now handler reset both Timeline and SliderState?",
+    choices: [
+      "The widget has its own stored value, so resetting the timeline alone could leave the thumb stale.",
+      "chrono-tz caches each city's local time and must be invalidated twice.",
+      "The Base app must receive the same reset through a shared slider entity."
+    ], answer: 0,
+    feedback: "The Component frontend owns a slider entity and mirrors changes into Timeline. Base instead receives its controlled value from Timeline each render. Neither reset communicates with the other running app."
+  },
+  {
+    title: "3. One elapsed hour after 2026-03-08T06:30Z, what should New York show?",
+    choices: [
+      "02:30 EST, because one hour adds one to the displayed hour.",
+      "01:30 EDT, because changing an offset never changes the local hour.",
+      "03:30 EDT, because UTC arithmetic crosses the spring-forward gap."
+    ], answer: 2,
+    feedback: "The new instant is 07:30Z. New York's offset has changed from -05:00 to -04:00. The skipped 02:30 wall time is never constructed."
+  },
+  {
+    title: "4. Which change is safest if you want another city in both frontends?",
+    choices: [
+      "Add a hardcoded UTC offset to each frontend separately.",
+      "Extend CITIES in time-core with a city label and IANA zone.",
+      "Move both frontends into one workspace and share a GPUI city-row entity."
+    ], answer: 1,
+    feedback: "Both frontends iterate CITIES. The core knows typed zone rules without importing GPUI, so the change reaches both apps without crossing incompatible UI types or assuming a permanent offset."
+  },
+  {
+    title: "5. You open both apps, then move the Base slider. Which statement is true?",
+    choices: [
+      "Component updates too, because both apps import the same Timeline type.",
+      "Both apps share an anchor but maintain different offsets.",
+      "Only Base updates; each app owns independent state, and the root test command also excludes Base."
+    ], answer: 2,
+    feedback: "Shared code is not shared memory. Each process constructs its own Timeline. The independent Cargo workspace additionally means Base needs its own manifest-path test command."
+  }
+];
+const answers = new Map();
+const quizCards = [];
+function updateScore() {
+  const correct = questions.filter((question, index) => answers.get(index) === question.answer).length;
+  document.getElementById("quiz-score").textContent =
+    `${answers.size} of 5 answered. ${correct} of 5 currently correct.`;
+}
+questions.forEach((question, index) => {
+  const card = document.createElement("article");
+  card.className = "quiz-card";
+  const title = document.createElement("h3");
+  title.id = `question-${index}`;
+  title.textContent = question.title;
+  const options = document.createElement("div");
+  options.className = "answers";
+  options.setAttribute("role", "group");
+  options.setAttribute("aria-labelledby", title.id);
+  const feedback = document.createElement("p");
+  feedback.id = `feedback-${index}`;
+  feedback.className = "feedback";
+  feedback.setAttribute("role", "status");
+  const buttons = question.choices.map((choice, choiceIndex) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = choice;
+    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-describedby", feedback.id);
+    button.addEventListener("click", () => {
+      answers.set(index, choiceIndex);
+      buttons.forEach((item, itemIndex) => item.setAttribute("aria-pressed", String(itemIndex === choiceIndex)));
+      const correct = choiceIndex === question.answer;
+      feedback.className = `feedback ${correct ? "correct" : "wrong"}`;
+      feedback.textContent = `${correct ? "Correct." : "Not quite."} ${question.feedback}`;
+      updateScore();
+    });
+    options.append(button);
+    return button;
+  });
+  card.append(title, options, feedback);
+  document.getElementById("quiz-questions").append(card);
+  quizCards.push({buttons, feedback});
+});
+document.getElementById("quiz-reset").addEventListener("click", () => {
+  answers.clear();
+  quizCards.forEach(({buttons, feedback}) => {
+    buttons.forEach(button => button.setAttribute("aria-pressed", "false"));
+    feedback.className = "feedback";
+    feedback.textContent = "";
+  });
+  updateScore();
+});
+</script>
+</body>
+</html>

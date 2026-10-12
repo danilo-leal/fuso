@@ -1,0 +1,13 @@
+[workspace]
+members = ["crates/time-core", "apps/component"]
+default-members = ["apps/component"]
+exclude = ["apps/base"]
+resolver = "2"
+
+[profile.dev]
+debug = 0
+incremental = false
+
+[profile.test]
+debug = 0
+incremental = false

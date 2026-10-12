@@ -1,0 +1,13 @@
+[package]
+name = "timezone-component"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+gpui = "=0.2.2"
+gpui-component = "=0.5.1"
+time-core = { path = "../../crates/time-core" }
+
+[dev-dependencies]
+gpui = { version = "=0.2.2", features = ["test-support"] }
